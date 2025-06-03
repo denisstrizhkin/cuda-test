@@ -6,102 +6,78 @@ const size_t WARP_SIZE = 32;
 template <typename T>
 __global__ void mat_mul(const T *const __restrict__ mA,
                         const T *const __restrict__ mB,
-                        T *const __restrict__ mC, const size_t A_rows,
-                        const size_t A_cols_B_rows, const size_t B_cols) {
-  const auto row = blockIdx.y * blockDim.y + threadIdx.y;
-  const auto col = blockIdx.x * blockDim.x + threadIdx.x;
+                        T *const __restrict__ mC,
+                        const size_t A_rows,
+                        const size_t A_cols_B_rows,
+                        const size_t B_cols) {
+    const auto row = blockIdx.y * blockDim.y + threadIdx.y;
+    const auto col = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (row < A_rows && col < B_cols) {
-    T sum = 0;
-    for (auto i = 0; i < A_cols_B_rows; i++) {
-      sum += mA[row * A_cols_B_rows + i] * mB[i * B_cols + col];
+    if (row < A_rows && col < B_cols) {
+        T sum = 0;
+        for (auto i = 0; i < A_cols_B_rows; i++) {
+            sum += mA[row * A_cols_B_rows + i] * mB[i * B_cols + col];
+        }
+        mC[row * B_cols + col] = sum;
     }
-    mC[row * B_cols + col] = sum;
-  }
 }
 
-template <typename T>
-Mat<T>::Mat(const size_t n, const size_t m) noexcept
-    : n_(n), m_(m), data_(CudaPtr<T>(n * m)) {}
+// --- Mat Class Implementations ---
 
-template <typename T>
-Mat<T>::Mat(const Mat &other) noexcept : Mat(other.n_, other.m_) {
-  data_.copy_from_cuda_ptr(other.data_);
+// Default constructor: Uses compile-time N and M for CudaPtr allocation
+template <typename T, size_t N, size_t M>
+Mat::Mat<T, N, M>::Mat() noexcept : data_(CudaPtr<T>(N * M)) {}
+
+// Copy constructor: Uses compile-time N and M from 'this' type
+template <typename T, size_t N, size_t M>
+Mat::Mat<T, N, M>::Mat(const Mat &other) noexcept : data_(CudaPtr<T>(N * M)) {
+    data_.copy_from_cuda_ptr(other.data_);
 }
 
-template <typename T> Mat<T> &Mat<T>::operator=(const Mat &other) noexcept {
-  if (this == &other) {
-    return *this;
-  }
-  n_ = other.n_;
-  m_ = other.m_;
-  if (data_.size() < other.size()) {
-    data_ = CudaPtr<T>(n_ * m_);
-  }
-  data_.copy_from_cuda_ptr(other.data_);
-  return *this;
+// Move constructor: Transfers ownership
+template <typename T, size_t N, size_t M>
+Mat::Mat<T, N, M>::Mat(Mat &&other) noexcept
+    : data_(std::move(other.data_)) {
 }
 
-template <typename T>
-Mat<T>::Mat(Mat &&other) noexcept
-    : n_(other.n_), m_(other.m_), data_(std::move(other.data_)) {
-  other.n_ = 0;
-  other.m_ = 0;
+// at() for mutable access: Uses compile-time M for column stride
+template <typename T, size_t N, size_t M>
+T &Mat::Mat<T, N, M>::at(const size_t i, const size_t j) noexcept {
+    return data_[i * M + j];
 }
 
-template <typename T> Mat<T> &Mat<T>::operator=(Mat &&other) noexcept {
-  if (this == &other) {
-    return *this;
-  }
-  n_ = other.n_;
-  m_ = other.m_;
-  data_ = std::move(other.data_);
-  other.n_ = 0;
-  other.m_ = 0;
-  return *this;
+// at() for constant access: Uses compile-time M for column stride
+template <typename T, size_t N, size_t M>
+const T &Mat::Mat<T, N, M>::at(const size_t i, const size_t j) const noexcept {
+    return data_[i * M + j];
 }
 
-template <typename T> T &Mat<T>::at(const size_t i, const size_t j) noexcept {
-  return data_[i * m_ + j];
+// dot() for matrix multiplication: Computes 'this' (N x M) * 'other' (M x K) = 'result' (N x K).
+template <typename T, size_t N, size_t M>
+template<size_t K>
+Mat::Mat<T, N, K> Mat::Mat<T, N, M>::dot(const Mat<T, M, K> &other) const noexcept {
+    Mat<T, N, K> mC;
+    dim3 dimBlock(WARP_SIZE, WARP_SIZE);
+    dim3 dimGrid((K + dimBlock.x - 1) / dimBlock.x,
+                     (N + dimBlock.y - 1) / dimBlock.y);
+    mat_mul<<<dimGrid, dimBlock>>>(data_.get(),
+                                   other.data_.get(),
+                                   mC.data_.get(),
+                                   N,
+                                   M,
+                                   K);
+    cudaDeviceSynchronize();
+    return mC;
 }
 
-template <typename T>
-const T &Mat<T>::at(const size_t i, const size_t j) const noexcept {
-  return data_[i * m_ + j];
-}
-
-template <typename T> Mat<T> Mat<T>::dot(const Mat &other) const noexcept {
-  if (m_ != other.n_) {
-    // You might want to throw an exception here or handle this error more
-    // robustly For simplicity, returning a default-constructed Mat or logging
-    // an error.
-    fprintf(stderr,
-            "Error: Incompatible dimensions for matrix multiplication! (%zu x "
-            "%zu) dot (%zu x %zu)\n",
-            n_, m_, other.n_, other.m_);
-    return Mat<T>(0, 0); // Return an empty matrix
-  }
-  const auto A_rows = n_;
-  const auto A_cols_B_rows = m_;
-  const auto B_cols = other.m_;
-  auto mC = Mat<T>(A_rows, B_cols);
-  dim3 dimBlock(WARP_SIZE, WARP_SIZE);
-  dim3 dimGrid((B_cols + dimBlock.x - 1) / dimBlock.x,
-               (A_rows + dimBlock.y - 1) / dimBlock.y);
-  mat_mul<<<dimGrid, dimBlock>>>(data_.get(), other.data_.get(), mC.data_.get(),
-                                 A_rows, A_cols_B_rows, B_cols);
-  return mC;
-}
-
-template <typename T>
-Mat<T> Mat<T>::random(const size_t n, const size_t m) noexcept {
-  Mat mat(n, m);
-  std::vector<T> host_data(n * m);
-  for (auto i = 0; i < n; i++) {
-    for (auto j = 0; j < m; j++) {
-      host_data[i * m + j] = Random::getInstance().next();
+// random() factory function: Uses compile-time N and M for the created matrix.
+template <typename T, size_t N, size_t M>
+Mat::Mat<T, N, M> Mat::random() noexcept {
+    Mat<T, N, M> mat;
+    std::vector<T> data(N * M);
+    for (size_t i = 0; i < N * M; ++i) {
+        data[i] = Random::getInstance().next();
     }
-  }
-  mat.data_.copy_from_host_ptr(host_data.data(), n * m);
-  return mat;
+    mat.data_.copy_from_host_ptr(data.data(), N * M);
+    return mat;
 }
