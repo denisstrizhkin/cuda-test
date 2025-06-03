@@ -1,9 +1,9 @@
 #include <cmath>
 #include <iostream>
 
-template <typename T> class CudaManagedPtr {
+template <typename T> class CudaPtr {
 public:
-  explicit CudaManagedPtr(const size_t n)
+  explicit CudaPtr(const size_t n)
       : ptr_(nullptr), size_bytes_(n * sizeof(T)) {
     if (n == 0) {
       return;
@@ -11,23 +11,23 @@ public:
     cudaMallocManaged(&ptr_, size_bytes_);
   }
 
-  ~CudaManagedPtr() {
+  ~CudaPtr() {
     if (ptr_ != nullptr) {
       cudaFree(ptr_);
       ptr_ = nullptr;
     }
   }
 
-  CudaManagedPtr(const CudaManagedPtr &) = delete;
-  CudaManagedPtr &operator=(const CudaManagedPtr &) = delete;
+  CudaPtr(const CudaPtr &) = delete;
+  CudaPtr &operator=(const CudaPtr &) = delete;
 
-  CudaManagedPtr(CudaManagedPtr &&other) noexcept
+  CudaPtr(CudaPtr &&other) noexcept
       : ptr_(other.ptr_), size_bytes_(other.size_bytes_) {
     other.ptr_ = nullptr;
     other.size_bytes_ = 0;
   }
 
-  CudaManagedPtr &operator=(CudaManagedPtr &&other) noexcept {
+  CudaPtr &operator=(CudaPtr &&other) noexcept {
     if (this != &other) {
       if (ptr_ != nullptr) {
         CUDA_CHECK(cudaFree(ptr_));
@@ -50,7 +50,7 @@ public:
 
   explicit operator bool() const { return ptr_ != nullptr; }
 
-  size_t size_bytes() const { return size_bytes_; }
+  size_t size() const { return size_bytes_; }
 
 private:
   T *ptr_;
@@ -82,8 +82,8 @@ int main(void) {
   
   const auto N = 200'000'000; // 1M elements
 
-  auto x = CudaManagedPtr<float>(N);
-  auto y = CudaManagedPtr<float>(N);
+  auto x = CudaPtr<float>(N);
+  auto y = CudaPtr<float>(N);
 
   for (int i = 0; i < N; i++) {
     x[i] = 1.0f;
@@ -93,8 +93,8 @@ int main(void) {
   const auto blockSize = 1024;
   const auto numBlocks = (N + blockSize - 1) / blockSize;
   // Run kernel on 1M elements on the CPU
-  cudaMemPrefetchAsync(x.get(), x.size_bytes(), 0, 0);
-  cudaMemPrefetchAsync(x.get(), x.size_bytes(), 0, 0);
+  cudaMemPrefetchAsync(x.get(), x.size(), 0, 0);
+  cudaMemPrefetchAsync(x.get(), x.size(), 0, 0);
   add<<<numBlocks, blockSize>>>(N, x.get(), y.get());
   cudaDeviceSynchronize();
 
