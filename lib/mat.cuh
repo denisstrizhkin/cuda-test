@@ -1,58 +1,43 @@
 #pragma once
 
 #include "pcuda.cuh"
-#include <utility>
 
-template<typename T>
+template <typename T>
+__global__ void mat_mul(const T *const __restrict__ mA,
+                        const T *const __restrict__ mB,
+                        T *const __restrict__ mC,
+                        const size_t A_rows,
+                        const size_t A_cols_B_rows,
+                        const size_t B_cols);
+
+template <typename T>
 class Mat {
-  public:
-    explicit Mat(const size_t n, const size_t m) noexcept: n_(n), m_(m), data_(CudaPtr<T>(n * m)) {}
+public:
+    explicit Mat(const size_t n, const size_t m) noexcept;
     ~Mat() noexcept = default;
 
-    Mat(const Mat& other) noexcept: Mat(other.n_, other.m_) {
-      data_.copy_from_cuda_ptr(other.data_);
-    };
+    Mat(const Mat &other) noexcept;
 
-    Mat &operator=(const Mat& other) noexcept {
-      if (this == &other) {
-        return *this;
-      }
-      n_ = other.n_;
-      m_ = other.m_;
-      if (data_.size_bytes() < other.size_bytes()) {
-        data_ = CudaPtr<T>(n_ * m_);
-      }
-      data_.copy_from_cuda_ptr(other.data_);
-      return *this;
-    }
+    Mat &operator=(const Mat &other) noexcept;
 
-    Mat(Mat &&other) noexcept: n_(other.n_), m_(other.m_), data_(std::move(other.data_)) {
-      other.n_ = 0;
-      other.m_ = 0;
-    }
+    Mat(Mat &&other) noexcept;
 
-    Mat &operator=(Mat&& other) noexcept {
-      if (this == &other) {
-        return *this;
-      }
-      n_ = other.n_;
-      m_ = other.m_;
-      data_ = std::move(other.data_);      
-      other.n_ = 0;
-      other.m_ = 0;
-      return *this;
-    }
+    Mat &operator=(Mat &&other) noexcept;
 
     const size_t rows() const noexcept { return n_; }
     const size_t cols() const noexcept { return m_; }
     const size_t size() const noexcept { return n_ * m_; }
     const size_t size_bytes() const noexcept { return data_.size_bytes(); }
 
-    T& at(const size_t i, const size_t j) noexcept { return data_[i * m_ + j]; }
-    const T& at(const size_t i, const size_t j) const noexcept { return data_[i * m_ + j]; }
+    T &at(const size_t i, const size_t j) noexcept;
+    const T &at(const size_t i, const size_t j) const noexcept;
 
-  private:
+    Mat dot(const Mat &other) const noexcept;
+
+    static Mat random(const size_t n, const size_t m) noexcept;
+
+private:
     CudaPtr<T> data_;
     size_t n_;
     size_t m_;
-};
+};;
