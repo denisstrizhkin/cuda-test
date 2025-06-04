@@ -34,12 +34,16 @@ void test_random() {
   std::cout << "=== OK ===\n";
 }
 
-template <typename T, size_t N, size_t M, size_t K> void test_mul_naive() {
-  std::cout << "\n=== test (" << N << "x" << M << ") by (" << M << "x" << K
-            << ") mul ===\n";
-  const auto a = Mat::Mat<double, N, M>::random();
-  const auto b = Mat::Mat<double, M, K>::random();
-  const auto c = a.dot_naive(b);
+template <typename T, size_t N, size_t M, size_t K, typename DotProductFunc>
+void test_mul(const std::string &test_name, DotProductFunc dot_func) {
+  std::cout << "\n=== test " << test_name << " (" << N << "x" << M << ") by ("
+            << M << "x" << K << ") mul ===\n";
+  const auto a = Mat::Mat<T, N, M>::random();
+  const auto b = Mat::Mat<T, M, K>::random();
+
+  // Call the dot product function via the member function pointer
+  const auto c = (a.*dot_func)(b);
+
   if (N < 5 && M < 5 && K < 5) {
     print_mat(a);
     print_mat(b);
@@ -53,7 +57,6 @@ template <typename T, size_t N, size_t M, size_t K> void test_mul_naive() {
     for (auto k = 0; k < b.cols(); k++) {
       auto expected = 0.0;
       for (auto j = 0; j < a.cols(); j++) {
-        // std::cout << a.at(i, j) << " " << b.at(j, k) << "\n";
         expected += a.at(i, j) * b.at(j, k);
       }
       const auto got = c.at(i, k);
@@ -68,12 +71,30 @@ template <typename T, size_t N, size_t M, size_t K> void test_mul_naive() {
   std::cout << "=== OK ===\n";
 }
 
+template <typename T, size_t N, size_t M, size_t K> void test_mul_naive() {
+  test_mul<T, N, M, K>("naive", &Mat::Mat<T, N, M>::template dot_naive<K>);
+}
+
+template <typename T, size_t N, size_t M, size_t K> void test_mul_shared() {
+  test_mul<T, N, M, K>("shared", &Mat::Mat<T, N, M>::template dot_shared<K>);
+}
+
 int main(void) {
   test_random();
+
+  std::cout << "\n--- Testing Naive Multiplication ---\n";
   test_mul_naive<double, 0, 0, 0>();
   test_mul_naive<double, 1, 1, 1>();
   test_mul_naive<double, 3, 2, 4>();
   test_mul_naive<double, 64, 128, 256>();
   test_mul_naive<double, 2048, 64, 4096>();
+
+  std::cout << "\n--- Testing Shared Multiplication ---\n";
+  test_mul_shared<double, 0, 0, 0>();
+  test_mul_shared<double, 1, 1, 1>();
+  test_mul_shared<double, 3, 2, 4>();
+  test_mul_shared<double, 64, 128, 256>();
+  test_mul_shared<double, 2048, 64, 4096>();
+
   return EXIT_SUCCESS;
 }

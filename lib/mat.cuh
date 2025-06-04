@@ -3,42 +3,60 @@
 #include "cuda_ptr.cuh"
 #include "rand.h"
 
-
 const size_t WARP_SIZE = 32;
-
 
 template <typename T>
 __global__ void mat_mul_naive(const T *const __restrict__ mA,
                               const T *const __restrict__ mB,
-                              T *const __restrict__ mC, const size_t A_rows,
-                              const size_t A_cols_B_rows, const size_t B_cols) {
+                              T *const __restrict__ mC, const size_t n,
+                              const size_t m, const size_t k) {
   const auto row = blockIdx.y * blockDim.y + threadIdx.y;
   const auto col = blockIdx.x * blockDim.x + threadIdx.x;
-  if (row < A_rows && col < B_cols) {
+  if (row < n && col < k) {
     T sum = 0;
-    for (auto i = 0; i < A_cols_B_rows; i++) {
-      sum += mA[row * A_cols_B_rows + i] * mB[i * B_cols + col];
+    for (auto i = 0; i < m; i++) {
+      sum += mA[row * m + i] * mB[i * k + col];
     }
-    mC[row * B_cols + col] = sum;
+    mC[row * k + col] = sum;
   }
 }
 
 template <typename T>
-__global__ void
-mat_mul_shared(const T *const __restrict__ mA, const T *const __restrict__ mB,
-               T *const __restrict__ mC, const size_t A_rows,
-               const size_t A_cols_B_rows, const size_t B_cols) {
+__global__ void mat_mul_shared(const T *const __restrict__ mA,
+                               const T *const __restrict__ mB,
+                               T *const __restrict__ mC, const size_t n,
+                               const size_t m, const size_t k) {
+  __shared__ T tA[WARP_SIZE][WARP_SIZE];
+  __shared__ T tB[WARP_SIZE][WARP_SIZE];
+  const auto tN = (m + WARP_SIZE - 1) / WARP_SIZE;
   const auto row = blockIdx.y * blockDim.y + threadIdx.y;
   const auto col = blockIdx.x * blockDim.x + threadIdx.x;
-  if (row < A_rows && col < B_cols) {
-    T sum = 0;
-    for (auto i = 0; i < A_cols_B_rows; i++) {
-      sum += mA[row * A_cols_B_rows + i] * mB[i * B_cols + col];
+  T sum = 0;
+  for (auto tI = 0; tI < tN; tI++) {
+    const auto a_row = row;
+    const auto a_col = tI * WARP_SIZE + threadIdx.x;
+    if (a_row < n && a_col < m) {
+      tA[threadIdx.y][threadIdx.x] = mA[a_row * m + a_col];
+    } else {
+      tA[threadIdx.y][threadIdx.x] = 0.0;
     }
-    mC[row * B_cols + col] = sum;
+    const auto b_row = tI * WARP_SIZE + threadIdx.y;
+    const auto b_col = col;
+    if (b_row < m && b_col < k) {
+      tB[threadIdx.y][threadIdx.x] = mB[b_row * k + b_col];
+    } else {
+      tB[threadIdx.y][threadIdx.x] = 0.0;
+    }
+    __syncthreads();
+    for (auto i = 0; i < WARP_SIZE; i++) {
+      sum += tA[threadIdx.y][i] * tB[i][threadIdx.x];
+    }
+    __syncthreads();
+  }
+  if (row < n && col < k) {
+    mC[row * k + col] = sum;
   }
 }
-
 
 namespace Mat {
 
@@ -64,7 +82,9 @@ public:
   const T *data() const noexcept { return data_.get(); }
 
   T &at(const size_t i, const size_t j) noexcept { return data_[i * M + j]; }
-  const T &at(const size_t i, const size_t j) const noexcept { return data_[i * M + j]; }
+  const T &at(const size_t i, const size_t j) const noexcept {
+    return data_[i * M + j];
+  }
 
   template <size_t K> Mat<T, N, K> dot_naive(const Mat<T, M, K> &other) const {
     Mat<T, N, K> result;
@@ -89,8 +109,8 @@ public:
     dim3 dimBlock(WARP_SIZE, WARP_SIZE);
     dim3 dimGrid((K + dimBlock.x - 1) / dimBlock.x,
                  (N + dimBlock.y - 1) / dimBlock.y);
-    mat_mul_naive<<<dimGrid, dimBlock>>>(data(), other.data(), result.data(), N,
-                                         M, K);
+    mat_mul_shared<<<dimGrid, dimBlock>>>(data(), other.data(), result.data(),
+                                          N, M, K);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     return result;
