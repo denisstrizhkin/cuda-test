@@ -1,6 +1,6 @@
 #pragma once
 
-#include "pcuda.cuh"
+#include "cuda_ptr.cuh"
 
 template <typename T>
 __global__ void mat_mul(const T *const __restrict__ mA,
@@ -26,7 +26,7 @@ public:
    * Initializes the underlying CudaPtr. The device memory for the matrix
    * is allocated but its contents are not set.
    */
-  explicit Mat() noexcept;
+  explicit Mat();
 
   /**
    * @brief Destroys the matrix.
@@ -44,7 +44,7 @@ public:
    *
    * @param other The matrix to copy from.
    */
-  Mat(const Mat &other) noexcept;
+  Mat(const Mat &other);
 
   /**
    * @brief Deleted copy assignment operator.
@@ -131,8 +131,7 @@ public:
    * @param other The right-hand side matrix for the multiplication.
    * @return A new `Mat` object representing the product of `this` and `other`.
    */
-  template <size_t K>
-  Mat<T, N, K> dot(const Mat<T, M, K> &other) const noexcept;
+  template <size_t K> Mat<T, N, K> dot(const Mat<T, M, K> &other) const;
 
 private:
   CudaPtr<T>
@@ -147,6 +146,6 @@ private:
  * @tparam M The number of columns for the new matrix.
  * @return A new `Mat<T, N, M>` object filled with random values.
  */
-template <typename T, size_t N, size_t M> Mat<T, N, M> random() noexcept;
+template <typename T, size_t N, size_t M> Mat<T, N, M> random();
 
 } // namespace Mat
