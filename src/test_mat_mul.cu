@@ -76,6 +76,13 @@ template <typename T, size_t N, size_t M, size_t K> void test_mul_shared() {
   test_mul<T, N, M, K>("shared", &Mat::Mat<T, N, M>::template dot_shared<K>);
 }
 
+template <typename T, size_t N, size_t M, size_t K>
+void test_mul_shared_with_warp_intrinsics() {
+  test_mul<T, N, M, K>(
+      "shared with warp intrinsics",
+      &Mat::Mat<T, N, M>::template dot_shared_with_warp_intrinsics<K>);
+}
+
 int main(void) {
   test_random();
   std::cout << "\n--- Testing Naive Multiplication ---\n";
@@ -90,5 +97,11 @@ int main(void) {
   test_mul_shared<double, 3, 2, 4>();
   test_mul_shared<double, 64, 128, 256>();
   test_mul_shared<double, 256, 512, 1024>();
+  std::cout << "\n--- Testing Shared Multiplication With Warp Intrinsics ---\n";
+  test_mul_shared_with_warp_intrinsics<double, 0, 0, 0>();
+  test_mul_shared_with_warp_intrinsics<double, 1, 1, 1>();
+  test_mul_shared_with_warp_intrinsics<double, 3, 2, 4>();
+  test_mul_shared_with_warp_intrinsics<double, 64, 128, 256>();
+  test_mul_shared_with_warp_intrinsics<double, 256, 512, 1024>();
   return EXIT_SUCCESS;
 }
