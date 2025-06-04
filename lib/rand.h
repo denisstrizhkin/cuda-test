@@ -21,7 +21,7 @@ public:
     return instance;
   }
 
-  const double next() { return distribution_(engine_); }
+  double next() { return distribution_(engine_); }
 
 private:
   std::mt19937 engine_;

@@ -1,12 +1,26 @@
 #pragma once
 
 #include "cuda_ptr.cuh"
+#include "rand.h"
+
+const size_t WARP_SIZE = 32;
 
 template <typename T>
 __global__ void mat_mul(const T *const __restrict__ mA,
                         const T *const __restrict__ mB,
                         T *const __restrict__ mC, const size_t A_rows,
-                        const size_t A_cols_B_rows, const size_t B_cols);
+                        const size_t A_cols_B_rows, const size_t B_cols) {
+  const auto row = blockIdx.y * blockDim.y + threadIdx.y;
+  const auto col = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (row < A_rows && col < B_cols) {
+    T sum = 0;
+    for (auto i = 0; i < A_cols_B_rows; i++) {
+      sum += mA[row * A_cols_B_rows + i] * mB[i * B_cols + col];
+    }
+    mC[row * B_cols + col] = sum;
+  }
+}
 
 namespace Mat {
 
@@ -26,7 +40,7 @@ public:
    * Initializes the underlying CudaPtr. The device memory for the matrix
    * is allocated but its contents are not set.
    */
-  explicit Mat();
+  explicit Mat() : data_(CudaPtr<T>(N * M)) {}
 
   /**
    * @brief Destroys the matrix.
@@ -44,7 +58,9 @@ public:
    *
    * @param other The matrix to copy from.
    */
-  Mat(const Mat &other);
+  Mat(const Mat &other) : data_(CudaPtr<T>(N * M)) {
+    data_.copy_from_cuda_ptr(other.data_);
+  }
 
   /**
    * @brief Deleted copy assignment operator.
@@ -60,7 +76,7 @@ public:
    *
    * @param other The matrix to move resources from.
    */
-  Mat(Mat &&other) noexcept;
+  Mat(Mat &&other) noexcept : data_(std::move(other.data_)) {}
 
   /**
    * @brief Deleted move assignment operator.
@@ -100,6 +116,9 @@ public:
    */
   size_t size_bytes() const noexcept { return data_.size_bytes(); }
 
+  const T *data() const noexcept { return data_.get(); }
+  T *data() noexcept { return data_.get(); }
+
   /**
    * @brief Provides mutable access to an element at the specified row and
    * column.
@@ -108,7 +127,7 @@ public:
    * @param j The column index (0-based).
    * @return A mutable reference to the element at `(i, j)`.
    */
-  T &at(const size_t i, const size_t j) noexcept;
+  T &at(const size_t i, const size_t j) noexcept { return data_[i * M + j]; }
 
   /**
    * @brief Provides constant access to an element at the specified row and
@@ -118,7 +137,9 @@ public:
    * @param j The column index (0-based).
    * @return A constant reference to the element at `(i, j)`.
    */
-  const T &at(const size_t i, const size_t j) const noexcept;
+  const T &at(const size_t i, const size_t j) const noexcept {
+    return data_[i * M + j];
+  }
 
   /**
    * @brief Performs matrix multiplication: `result = this * other`.
@@ -131,21 +152,32 @@ public:
    * @param other The right-hand side matrix for the multiplication.
    * @return A new `Mat` object representing the product of `this` and `other`.
    */
-  template <size_t K> Mat<T, N, K> dot(const Mat<T, M, K> &other) const;
+  template <size_t K> Mat<T, N, K> dot(const Mat<T, M, K> &other) const {
+    Mat<T, N, K> result;
+    if (N == 0 || K == 0) {
+      return result;
+    }
+    dim3 dimBlock(WARP_SIZE, WARP_SIZE);
+    dim3 dimGrid((K + dimBlock.x - 1) / dimBlock.x,
+                 (N + dimBlock.y - 1) / dimBlock.y);
+    mat_mul<<<dimGrid, dimBlock>>>(data(), other.data(), result.data(), N, M,
+                                   K);
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
+    return result;
+  };
+
+  static Mat<T, N, M> random() {
+    Mat<T, N, M> mat;
+    for (size_t i = 0; i < N * M; ++i) {
+      mat.data_[i] = Random::getInstance().next();
+    }
+    return mat;
+  }
 
 private:
   CudaPtr<T>
       data_; ///< Pointer to the device memory storing the matrix elements.
 };
 
-/**
- * @brief Factory function to create a matrix with random values.
- *
- * @tparam T The data type of the matrix elements.
- * @tparam N The number of rows for the new matrix.
- * @tparam M The number of columns for the new matrix.
- * @return A new `Mat<T, N, M>` object filled with random values.
- */
-template <typename T, size_t N, size_t M> Mat<T, N, M> random();
-
-} // namespace Mat
+}; // namespace Mat

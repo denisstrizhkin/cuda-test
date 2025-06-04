@@ -43,7 +43,8 @@ public:
     return *this;
   }
 
-  T *get() const noexcept { return ptr_; }
+  T *get() noexcept { return ptr_; }
+  const T *get() const noexcept { return ptr_; }
 
   T &operator*() const noexcept { return *ptr_; }
   T *operator->() const noexcept { return ptr_; }
