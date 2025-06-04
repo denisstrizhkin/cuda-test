@@ -78,9 +78,28 @@ template <typename T, size_t N, size_t M, size_t K> void bench_mul_cpu() {
 int main(void) {
   cudaDeviceProp deviceProp;
   CUDA_CHECK(cudaGetDeviceProperties(&deviceProp, 0));
-  std::cout << "=== Device Info ===\n"
-            << "Max shared memory per block: "
+  std::cout << "=== Device Info: " << deviceProp.name << " ===\n"
+            << "  Compute Capability: " << deviceProp.major << "."
+            << deviceProp.minor << "\n"
+            << "  Global Memory: " << deviceProp.totalGlobalMem / (1024 * 1024)
+            << "MB\n"
+            << "  Memory Clock Rate: " << deviceProp.memoryClockRate / 1000.0
+            << "MHz (Effective)\n"
+            << "  GPU Clock Rate (Max): " << deviceProp.clockRate / 1000.0
+            << "MHz\n"
+            << "  Shared Memory per Block: "
             << deviceProp.sharedMemPerBlock / 1024.0 << "KB\n"
+            << "  Shared Memory per Multiprocessor: "
+            << deviceProp.sharedMemPerMultiprocessor / 1024.0 << "\n"
+            << "  Registers per Block: " << deviceProp.regsPerBlock << "\n"
+            << "  Max Threads per Block: " << deviceProp.maxThreadsPerBlock
+            << "\n"
+            << "  Max Threads per Multiprocessor: "
+            << deviceProp.maxThreadsPerMultiProcessor << "\n"
+            << "  Multiprocessor Count: " << deviceProp.multiProcessorCount
+            << "\n"
+            << "  L2 Cache Size: " << deviceProp.l2CacheSize / 1024.0 << "KB"
+            << "\n"
             << "===\n";
   std::cout << "\n--- Benchmarking CPU Multiplication ---\n";
   bench_mul_cpu<float, 8, 16, 32>();
