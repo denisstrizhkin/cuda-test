@@ -6,7 +6,24 @@
 const size_t WARP_SIZE = 32;
 
 template <typename T>
-__global__ void mat_mul(const T *const __restrict__ mA,
+__global__ void mat_mul_naive(const T *const __restrict__ mA,
+                        const T *const __restrict__ mB,
+                        T *const __restrict__ mC, const size_t A_rows,
+                        const size_t A_cols_B_rows, const size_t B_cols) {
+  const auto row = blockIdx.y * blockDim.y + threadIdx.y;
+  const auto col = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (row < A_rows && col < B_cols) {
+    T sum = 0;
+    for (auto i = 0; i < A_cols_B_rows; i++) {
+      sum += mA[row * A_cols_B_rows + i] * mB[i * B_cols + col];
+    }
+    mC[row * B_cols + col] = sum;
+  }
+}
+
+template <typename T>
+__global__ void mat_mul_shared(const T *const __restrict__ mA,
                         const T *const __restrict__ mB,
                         T *const __restrict__ mC, const size_t A_rows,
                         const size_t A_cols_B_rows, const size_t B_cols) {
@@ -152,7 +169,7 @@ public:
    * @param other The right-hand side matrix for the multiplication.
    * @return A new `Mat` object representing the product of `this` and `other`.
    */
-  template <size_t K> Mat<T, N, K> dot(const Mat<T, M, K> &other) const {
+  template <size_t K> Mat<T, N, K> dot_naive(const Mat<T, M, K> &other) const {
     Mat<T, N, K> result;
     if (N == 0 || K == 0) {
       return result;
@@ -160,7 +177,7 @@ public:
     dim3 dimBlock(WARP_SIZE, WARP_SIZE);
     dim3 dimGrid((K + dimBlock.x - 1) / dimBlock.x,
                  (N + dimBlock.y - 1) / dimBlock.y);
-    mat_mul<<<dimGrid, dimBlock>>>(data(), other.data(), result.data(), N, M,
+    mat_mul_naive<<<dimGrid, dimBlock>>>(data(), other.data(), result.data(), N, M,
                                    K);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());

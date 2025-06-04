@@ -34,12 +34,12 @@ void test_random() {
   std::cout << "=== OK ===\n";
 }
 
-template <typename T, size_t N, size_t M, size_t K> void test_mul() {
+template <typename T, size_t N, size_t M, size_t K> void test_mul_naive() {
   std::cout << "\n=== test (" << N << "x" << M << ") by (" << M << "x" << K
             << ") mul ===\n";
   const auto a = Mat::Mat<double, N, M>::random();
   const auto b = Mat::Mat<double, M, K>::random();
-  const auto c = a.dot(b);
+  const auto c = a.dot_naive(b);
   if (N < 5 && M < 5 && K < 5) {
     print_mat(a);
     print_mat(b);
@@ -70,10 +70,10 @@ template <typename T, size_t N, size_t M, size_t K> void test_mul() {
 
 int main(void) {
   test_random();
-  test_mul<double, 0, 0, 0>();
-  test_mul<double, 1, 1, 1>();
-  test_mul<double, 3, 2, 4>();
-  test_mul<double, 64, 128, 256>();
-  test_mul<double, 2048, 64, 4096>();
+  test_mul_naive<double, 0, 0, 0>();
+  test_mul_naive<double, 1, 1, 1>();
+  test_mul_naive<double, 3, 2, 4>();
+  test_mul_naive<double, 64, 128, 256>();
+  test_mul_naive<double, 2048, 64, 4096>();
   return EXIT_SUCCESS;
 }

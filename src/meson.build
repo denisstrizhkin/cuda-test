@@ -13,13 +13,13 @@ executable(
 )
 
 # Define test_vector_sum executable
-executable(
-    'test_vector_sum',
-    'test_vector_sum.cu',
-    dependencies : common_cuda_dep, # Link with common_cuda_utils
-    # Cuda specific arguments
-    # Note: You might need to adjust these based on your CUDA toolkit version and requirements
-    cuda_args : ['--gpu-architecture=sm_86'],
-    link_args : ['-lcudart', '-lcuda'],
-    install : true,
-)
+# executable(
+#     'test_vector_sum',
+#     'test_vector_sum.cu',
+#     dependencies : common_cuda_dep, # Link with common_cuda_utils
+#     # Cuda specific arguments
+#     # Note: You might need to adjust these based on your CUDA toolkit version and requirements
+#     cuda_args : ['--gpu-architecture=sm_86'],
+#     link_args : ['-lcudart', '-lcuda'],
+#     install : true,
+# )

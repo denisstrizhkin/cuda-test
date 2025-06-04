@@ -1,5 +1,5 @@
 project_sources = files(
-    'util.cu',
+    # 'util.cu',
 )
 
 # Define a static library for common CUDA utilities
