@@ -73,14 +73,14 @@ public:
    *
    * @return The compile-time constant number of rows, N.
    */
-  const size_t rows() const noexcept { return N; }
+  size_t rows() const noexcept { return N; }
 
   /**
    * @brief Returns the number of columns in the matrix.
    *
    * @return The compile-time constant number of columns, M.
    */
-  const size_t cols() const noexcept { return M; }
+  size_t cols() const noexcept { return M; }
 
   /**
    * @brief Returns the total number of elements in the matrix.
@@ -89,7 +89,7 @@ public:
    *
    * @return The total number of elements (N * M).
    */
-  const size_t size() const noexcept { return data_._size(); }
+  size_t size() const noexcept { return data_.size(); }
 
   /**
    * @brief Returns the total size of the matrix in bytes.
@@ -98,7 +98,7 @@ public:
    *
    * @return The size of the matrix data in bytes.
    */
-  const size_t size_bytes() const noexcept { return data_.size_bytes(); }
+  size_t size_bytes() const noexcept { return data_.size_bytes(); }
 
   /**
    * @brief Provides mutable access to an element at the specified row and
