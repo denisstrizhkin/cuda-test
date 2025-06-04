@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cuda_err.cuh"
 #include "cuda_ptr.cuh"
 #include "rand.h"
 
@@ -94,6 +95,8 @@ public:
     dim3 dimBlock(WARP_SIZE, WARP_SIZE);
     dim3 dimGrid((K + dimBlock.x - 1) / dimBlock.x,
                  (N + dimBlock.y - 1) / dimBlock.y);
+    CUDA_CHECK(cudaMemPrefetchAsync(data(), size_bytes(), 0));
+    CUDA_CHECK(cudaMemPrefetchAsync(other.data(), other.size_bytes(), 0));
     mat_mul_naive<<<dimGrid, dimBlock>>>(data(), other.data(), result.data(), N,
                                          M, K);
     CUDA_CHECK(cudaGetLastError());
@@ -109,6 +112,8 @@ public:
     dim3 dimBlock(WARP_SIZE, WARP_SIZE);
     dim3 dimGrid((K + dimBlock.x - 1) / dimBlock.x,
                  (N + dimBlock.y - 1) / dimBlock.y);
+    CUDA_CHECK(cudaMemPrefetchAsync(data(), size_bytes(), 0));
+    CUDA_CHECK(cudaMemPrefetchAsync(other.data(), other.size_bytes(), 0));
     mat_mul_shared<<<dimGrid, dimBlock>>>(data(), other.data(), result.data(),
                                           N, M, K);
     CUDA_CHECK(cudaGetLastError());
