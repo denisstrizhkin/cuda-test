@@ -3,6 +3,8 @@
 #include "cuda_err.cuh"
 #include "cuda_ptr.cuh"
 #include "rand.h"
+#include <cuda/std/limits>
+#include <vector>
 
 const size_t WARP_SIZE = 32;
 
@@ -70,11 +72,34 @@ __global__ void mat_transpose(const T *const __restrict__ mA,
   }
 }
 
+template <typename T>
+__global__ void mat_softmax(const T *const __restrict__ mA,
+                            T *const __restrict__ mB, const size_t n,
+                            const size_t m) {
+  const auto row = blockIdx.x;
+  if (row < n) {
+    auto max_val = ::cuda::std::numeric_limits<T>::lowest();
+    for (auto i = 0; i < m; ++i) {
+      max_val = max(max_val, mA[row * m + i]);
+    }
+    auto sum_exp = static_cast<T>(0);
+    for (auto i = 0; i < m; ++i) {
+      sum_exp += exp(mA[row * m + i] - max_val);
+    }
+    for (auto i = 0; i < m; ++i) {
+      mB[row * m + i] = exp(mA[row * m + i] - max_val) / sum_exp;
+    }
+  }
+}
+
 namespace Mat {
 
 template <typename T, size_t N, size_t M> class Mat {
 public:
   explicit Mat() : data_(CudaPtr<T>(N * M)) {}
+  explicit Mat(const std::vector<T> &v) : data_(CudaPtr<T>(N * M)) {
+    data_.copy_from_host_ptr(v.data(), N * M);
+  }
   ~Mat() noexcept = default;
 
   Mat(const Mat &other) : data_(CudaPtr<T>(N * M)) {
@@ -144,8 +169,8 @@ public:
                  (N + dimBlock.y - 1) / dimBlock.y);
     CUDA_CHECK(cudaMemPrefetchAsync(data(), size_bytes(), 0));
     CUDA_CHECK(cudaMemPrefetchAsync(other.data(), other.size_bytes(), 0));
-    mat_mul_shared_with_warp_intrinsics<<<dimGrid, dimBlock>>>(
-        data(), other.data(), result.data(), N, M, K);
+    // mat_mul_shared_with_warp_intrinsics<<<dimGrid, dimBlock>>>(
+    //     data(), other.data(), result.data(), N, M, K);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     return result;
@@ -160,7 +185,21 @@ public:
     dim3 dimGrid((N + dimBlock.x - 1) / dimBlock.x,
                  (M + dimBlock.y - 1) / dimBlock.y);
     CUDA_CHECK(cudaMemPrefetchAsync(data(), size_bytes(), 0));
-    transpose<<<dimGrid, dimBlock>>>(data(), result.data(), N, M);
+    mat_transpose<<<dimGrid, dimBlock>>>(data(), result.data(), N, M);
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
+    return result;
+  }
+
+  Mat<T, N, M> softmax() const {
+    Mat<T, N, M> result;
+    if (N == 0 || M == 0) {
+      return result;
+    }
+    dim3 dimGrid(N, 1, 1);
+    dim3 dimBlock(1, 1, 1);
+    CUDA_CHECK(cudaMemPrefetchAsync(data(), size_bytes(), 0));
+    mat_softmax<<<dimGrid, dimBlock>>>(data(), result.data(), N, M);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     return result;
@@ -172,6 +211,14 @@ public:
       mat.data_[i] = Random::getInstance().next();
     }
     return mat;
+  }
+
+  static Mat<T, N, M> attention(const Mat<T, N, M> &mQ, const Mat<T, N, M> &mK,
+                                const Mat<T, N, M> &mV) {
+    const auto mKT = mK.transpose();
+    const auto s = mQ.dot_shared(mKT);
+    const auto p = s.softmax();
+    return p.dot_shared(mV);
   }
 
 private:

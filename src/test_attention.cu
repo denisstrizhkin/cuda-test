@@ -39,7 +39,35 @@ template <typename T> void test_attention_cpu() {
   }
 }
 
+void test_gpu() {
+  const size_t N = 4;
+  const size_t D = 8;
+  const auto mQ = cpu::random<float, N, D>();
+  const auto mK = cpu::random<float, N, D>();
+  const auto mV = cpu::random<float, N, D>();
+  const auto result = cpu::attention<float, N, D>(mQ, mK, mV);
+  assert(result.size() == N * D);
+  const auto gMQ = Mat::Mat<float, N, D>(mQ);
+  const auto gMK = Mat::Mat<float, N, D>(mK);
+  const auto gMV = Mat::Mat<float, N, D>(mV);
+  const auto gResult = Mat::Mat<float, N, D>::attention(gMQ, gMK, gMV);
+  assert(gResult.size() == N * D);
+  for (auto i = 0; i < N; i++) {
+    for (auto j = 0; j < D; j++) {
+      const auto got = gResult.at(i ,j);
+      const auto expected = result[i * D + j];
+      const auto diff = std::abs(expected - got);
+      if (diff > 1e-3) {
+        std::cout << "at (" << i << "," << j << ") expected: " << expected
+                  << ", got: " << got << "\n";
+        assert(false);
+      }
+    }
+  }
+}
+
 int main(void) {
   test_attention_cpu<float>();
+  test_gpu();
   return EXIT_SUCCESS;
 }
