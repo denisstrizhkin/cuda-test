@@ -101,8 +101,8 @@ int main(void) {
   bench_mul_shared<float, 1024, 2048, 4096>();
   std::cout
       << "\n--- Benchmarking Shared Multiplication With Warp Intrinsics ---\n";
-  bench_mul_shared_with_warp_intrinsics<float, 8, 16, 32>();
-  bench_mul_shared_with_warp_intrinsics<float, 64, 128, 256>();
-  bench_mul_shared_with_warp_intrinsics<float, 1024, 2048, 4096>();
+  // bench_mul_shared_with_warp_intrinsics<float, 8, 16, 32>();
+  // bench_mul_shared_with_warp_intrinsics<float, 64, 128, 256>();
+  // bench_mul_shared_with_warp_intrinsics<float, 1024, 2048, 4096>();
   return EXIT_SUCCESS;
 }

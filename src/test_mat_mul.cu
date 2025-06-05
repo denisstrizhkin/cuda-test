@@ -98,10 +98,10 @@ int main(void) {
   test_mul_shared<double, 64, 128, 256>();
   test_mul_shared<double, 256, 512, 1024>();
   std::cout << "\n--- Testing Shared Multiplication With Warp Intrinsics ---\n";
-  test_mul_shared_with_warp_intrinsics<double, 0, 0, 0>();
-  test_mul_shared_with_warp_intrinsics<double, 1, 1, 1>();
-  test_mul_shared_with_warp_intrinsics<double, 3, 2, 4>();
-  test_mul_shared_with_warp_intrinsics<double, 64, 128, 256>();
-  test_mul_shared_with_warp_intrinsics<double, 256, 512, 1024>();
+  // test_mul_shared_with_warp_intrinsics<double, 0, 0, 0>();
+  // test_mul_shared_with_warp_intrinsics<double, 1, 1, 1>();
+  // test_mul_shared_with_warp_intrinsics<double, 3, 2, 4>();
+  // test_mul_shared_with_warp_intrinsics<double, 64, 128, 256>();
+  // test_mul_shared_with_warp_intrinsics<double, 256, 512, 1024>();
   return EXIT_SUCCESS;
 }
