@@ -1,5 +1,6 @@
 #include "mat.cuh"
 #include "rand.h"
+#include "cpu.h"
 
 #include <cassert>
 #include <chrono>
@@ -49,25 +50,10 @@ void bench_mul_shared_with_warp_intrinsics() {
 
 template <typename T, size_t N, size_t M, size_t K> void bench_mul_cpu() {
   print_bench_header("cpu", N, M, K);
-  std::vector<T> a(N * M);
-  for (auto i = 0; i < a.size(); i++) {
-    a[i] = Random::getInstance().next();
-  }
-  std::vector<T> b(M * K);
-  for (auto i = 0; i < b.size(); i++) {
-    b[i] = Random::getInstance().next();
-  }
-  std::vector<T> c(N * K);
+  const auto a = cpu::random<T, N, M>();
+  const auto b = cpu::random<T, M, K>();
   const auto start_time = std::chrono::high_resolution_clock::now();
-  for (auto i = 0; i < N; i++) {
-    for (auto j = 0; j < K; j++) {
-      T sum = 0;
-      for (auto k = 0; k < M; k++) {
-        sum += a[i * M + k] * b[k * K + j];
-      }
-      c[i * K + j] = sum;
-    }
-  }
+  const auto c = cpu::dot<T, N, M, K>(a, b);
   const auto end_time = std::chrono::high_resolution_clock::now();
   const std::chrono::duration<float, std::milli> duration =
       end_time - start_time;

@@ -21,3 +21,14 @@ executable(
     link_args : ['-lcudart', '-lcuda'],
     install : true,
 )
+
+executable(
+    'test_attention',
+    'test_attention.cu',
+    dependencies : common_cuda_dep, # Link with common_cuda_utils
+    # Cuda specific arguments
+    # Note: You might need to adjust these based on your CUDA toolkit version and requirements
+    cuda_args : ['--gpu-architecture=sm_86'],
+    link_args : ['-lcudart', '-lcuda'],
+    install : true,
+)
