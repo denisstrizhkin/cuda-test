@@ -15,7 +15,7 @@ public:
     if (ptr_ != nullptr) {
       try {
         CUDA_CHECK(cudaFree(ptr_))
-      } catch (CudaException) {
+      } catch (const CudaException &e) {
       }
       ptr_ = nullptr;
     }
@@ -57,12 +57,12 @@ public:
   size_t size() const noexcept { return size_bytes_ / sizeof(T); }
   size_t size_bytes() const noexcept { return size_bytes_; }
 
-  void copy_from_cuda_ptr(const CudaPtr<T> &other, const size_t n) {
-    CUDA_CHECK(cudaMemcpy(ptr_, other.ptr_, n, cudaMemcpyDeviceToDevice));
+  void copy_from_cuda_ptr(const CudaPtr<T> &other, const size_t n_bytes) {
+    CUDA_CHECK(cudaMemcpy(ptr_, other.ptr_, n_bytes, cudaMemcpyDeviceToDevice));
   }
 
-  void copy_from_host_ptr(const T *const p, const size_t n) {
-    CUDA_CHECK(cudaMemcpy(ptr_, p, n, cudaMemcpyHostToDevice));
+  void copy_from_host_ptr(const T *const p, const size_t n_bytes) {
+    CUDA_CHECK(cudaMemcpy(ptr_, p, n_bytes, cudaMemcpyHostToDevice));
   }
 
 private:

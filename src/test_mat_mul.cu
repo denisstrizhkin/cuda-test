@@ -13,8 +13,8 @@ void print_mat(const Mat::Mat<T, N, M> &mat) {
   oss << "mat.cols(): " << mat.cols() << "\n";
   oss << "mat.size(): " << mat.size() << "\n";
   oss << "mat.size_bytes(): " << mat.size_bytes() << "\n";
-  for (auto i = 0; i < mat.rows(); i++) {
-    for (auto j = 0; j < mat.cols(); j++) {
+  for (size_t i = 0; i < mat.rows(); i++) {
+    for (size_t j = 0; j < mat.cols(); j++) {
       oss << mat.at(i, j) << " ";
     }
     oss << "\n";
@@ -50,10 +50,10 @@ void test_mul(const std::string &test_name, DotProductFunc dot_func) {
   assert(c.size_bytes() == N * K * sizeof(T));
   assert(c.rows() == N);
   assert(c.cols() == K);
-  for (auto i = 0; i < a.rows(); i++) {
-    for (auto k = 0; k < b.cols(); k++) {
+  for (size_t i = 0; i < a.rows(); i++) {
+    for (size_t k = 0; k < b.cols(); k++) {
       auto expected = 0.0;
-      for (auto j = 0; j < a.cols(); j++) {
+      for (size_t j = 0; j < a.cols(); j++) {
         expected += a.at(i, j) * b.at(j, k);
       }
       const auto got = c.at(i, k);

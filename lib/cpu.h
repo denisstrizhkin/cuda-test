@@ -20,7 +20,7 @@ void check_dims(const std::vector<T> &v) {
 
 template <typename T, size_t N> std::vector<T> random() {
   std::vector<T> v(N);
-  for (auto i = 0; i < N; i++) {
+  for (size_t i = 0; i < N; i++) {
     v[i] = Random::getInstance().next();
   }
   return v;
@@ -38,10 +38,10 @@ std::vector<T> dot(const std::vector<T> &a, const std::vector<T> &b) {
   if (N == 0 || M == 0 || K == 0) {
     return c;
   }
-  for (auto i = 0; i < N; i++) {
-    for (auto j = 0; j < K; j++) {
-      T sum = 0;
-      for (auto k = 0; k < M; k++) {
+  for (size_t i = 0; i < N; i++) {
+    for (size_t j = 0; j < K; j++) {
+      auto sum = static_cast<T>(0);
+      for (size_t k = 0; k < M; k++) {
         sum += a[i * M + k] * b[k * K + j];
       }
       c[i * K + j] = sum;
@@ -54,8 +54,8 @@ template <typename T, size_t N, size_t M>
 std::vector<T> transpose(const std::vector<T> &v) {
   check_dims<T, N, M>(v);
   std::vector<T> t(N * M);
-  for (auto i = 0; i < N; ++i) {
-    for (auto j = 0; j < M; ++j) {
+  for (size_t i = 0; i < N; ++i) {
+    for (size_t j = 0; j < M; ++j) {
       t[j * N + i] = v[i * M + j];
     }
   }
@@ -66,16 +66,16 @@ template <typename T, size_t N, size_t M>
 std::vector<T> softmax(const std::vector<T> &v) {
   check_dims<T, N, M>(v);
   std::vector<T> p(N * M);
-  for (auto i = 0; i < N; ++i) {
+  for (size_t i = 0; i < N; ++i) {
     const auto max_val =
         *std::max_element(v.begin() + i * M, v.begin() + (i + 1) * M);
-    T exp_sum = 0;
-    for (auto j = 0; j < M; ++j) {
+    auto exp_sum = static_cast<T>(0);
+    for (size_t j = 0; j < M; ++j) {
       const auto ed = std::exp(v[i * M + j] - max_val);
       p[i * M + j] = ed;
       exp_sum += ed;
     }
-    for (auto j = 0; j < M; ++j) {
+    for (size_t j = 0; j < M; ++j) {
       p[i * M + j] /= exp_sum;
     }
   }
