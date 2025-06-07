@@ -1,7 +1,6 @@
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
-#include <sstream>
 #include <vector>
 
 #include "cpu.h"
@@ -59,6 +58,26 @@ template <typename T, size_t N, size_t M> void test_transpose() {
   compare(mAT, aT);
 }
 
+template <typename T, size_t N, size_t M> void test_softmax() {
+  const auto a = cpu::random<T, N, M>();
+  const auto smaxA = cpu::softmax<T, N, M>(a);
+  const auto mA = Mat::Mat<T, N, M>(a);
+  const auto smaxMA = mA.softmax();
+  compare(smaxMA, smaxA);
+}
+
+template <typename T, size_t N, size_t M> void test_attention() {
+  const auto q = cpu::random<T, N, M>();
+  const auto k = cpu::random<T, N, M>();
+  const auto v = cpu::random<T, N, M>();
+  const auto o = cpu::attention<T, N, M>(q, k, v);
+  const auto mQ = Mat::Mat<T, N, M>(q);
+  const auto mK = Mat::Mat<T, N, M>(k);
+  const auto mV = Mat::Mat<T, N, M>(v);
+  const auto mO = Mat::Mat<T, N, M>::attention(mQ, mK, mV);
+  compare(mO, o);
+}
+
 template <typename T> void test_attention_cpu() {
   const size_t N = 3;
   const size_t D = 2;
@@ -91,40 +110,17 @@ template <typename T> void test_attention_cpu() {
   }
 }
 
-// void test_gpu() {
-//   const size_t N = 4;
-//   const size_t D = 8;
-//   const auto mQ = cpu::random<float, N, D>();
-//   const auto mK = cpu::random<float, N, D>();
-//   const auto mV = cpu::random<float, N, D>();
-//   const auto result = cpu::attention<float, N, D>(mQ, mK, mV);
-//   assert(result.size() == N * D);
-//   const auto gMQ = Mat::Mat<float, N, D>(mQ);
-//   const auto gMK = Mat::Mat<float, N, D>(mK);
-//   const auto gMV = Mat::Mat<float, N, D>(mV);
-//   const auto gResult = Mat::Mat<float, N, D>::attention(gMQ, gMK, gMV);
-//   assert(gResult.size() == N * D);
-//   for (auto i = 0; i < N; i++) {
-//     for (auto j = 0; j < D; j++) {
-//       const auto got = gResult.at(i ,j);
-//       const auto expected = result[i * D + j];
-//       const auto diff = std::abs(expected - got);
-//       if (diff > 1e-3) {
-//         std::cout << "at (" << i << "," << j << ") expected: " << expected
-//                   << ", got: " << got << "\n";
-//         assert(false);
-//       }
-//     }
-//   }
-// }
-
 int main(void) {
-  test_from_vector<float, 3, 5>();
-  test_transpose<float, 3, 5>();
-  test_from_vector<float, 5, 3>();
-  test_transpose<float, 5, 3>();
-
-  // test_attention_cpu<float>();
-  // test_gpu();
+  test_attention_cpu<float>();
+  const size_t N = 8;
+  const size_t D = 4;
+  test_from_vector<float, N, D>();
+  test_transpose<float, N, D>();
+  test_softmax<float, N, D>();
+  test_attention<float, N, N>();
+  test_from_vector<float, D, N>();
+  test_transpose<float, D, N>();
+  test_softmax<float, D, N>();
+  test_attention<float, D, N>();
   return EXIT_SUCCESS;
 }
