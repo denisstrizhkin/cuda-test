@@ -141,7 +141,7 @@ __global__ void mat_flash_attention(
     for (size_t col = 0; col < Bc; col++) {
       T sum = static_cast<T>(0);
       for (size_t d = 0; d < D; d++) {
-        sum += sQ[blockIdx.x * D + d] * sK[d * Bc + col];
+        sum += sQ[threadIdx.x * D + d] * sK[col * D + d];
       }
       sS[threadIdx.x * Bc + col] = sum;
       row_m = max(row_m, sum);
@@ -158,7 +158,7 @@ __global__ void mat_flash_attention(
     for (size_t d = 0; d < D; d++) {
       T pv = static_cast<T>(0);
       for (size_t col = 0; col < Bc; col++) {
-        pv += sS[blockIdx.x * D + col] * sV[col * D + d];
+        pv += sS[threadIdx.x * D + col] * sV[col * D + d];
       }
       O_hbm[global_q_row * D + d] =
           (1 / new_l) *
