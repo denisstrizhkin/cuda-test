@@ -98,15 +98,13 @@ __global__ void mat_softmax(const T *const __restrict__ mA,
 }
 
 template <typename T>
-__global__ void mat_flash_attention(
-    const T *__restrict__ Q_hbm, const T *__restrict__ K_hbm,
-    const T *__restrict__ V_hbm, T *__restrict__ O_hbm,
-    T *__restrict__ l_hbm, // l vector (log-sum-exp normalization)
-    T *__restrict__ m_hbm, // m vector (row-wise max)
-    const size_t N, const size_t D, const size_t Tr, const size_t Tc,
-    const size_t Br, // Row block size for Q_i, O_i
-    const size_t Bc  // Column block size for K_j, V_j
-) {
+__global__ void
+mat_flash_attention(const T *const __restrict__ mQ,
+                    const T *const __restrict__ mK,
+                    const T *const __restrict__ mV, T *const __restrict__ mO,
+                    T *const __restrict__ vl, T *const __restrict__ vm,
+                    const size_t N, const size_t D, const size_t Tr,
+                    const size_t Tc, const size_t Br, const size_t Bc) {
   const size_t global_q_row = blockIdx.x * Br + threadIdx.x;
   if (global_q_row >= N) {
     return;
@@ -117,10 +115,10 @@ __global__ void mat_flash_attention(
   T *sV = &smem[Br * D + Bc * D];
   T *sS = &smem[Br * D + Bc * D * 2];
   for (size_t col = 0; col < D; col++) {
-    sQ[threadIdx.x * D + col] = Q_hbm[global_q_row * D + col];
+    sQ[threadIdx.x * D + col] = mQ[global_q_row * D + col];
   }
-  T current_l = l_hbm[global_q_row];
-  T current_m = m_hbm[global_q_row];
+  T current_l = vl[global_q_row];
+  T current_m = vm[global_q_row];
   for (size_t j = 0; j < Tc; j++) {
     for (size_t row = 0; row < Bc; row++) {
       for (size_t col = 0; col < D; col++) {
@@ -128,8 +126,8 @@ __global__ void mat_flash_attention(
         const size_t global_ij = global_row * D + col;
         const size_t ij = row * D + col;
         if (global_row < N) {
-          sK[ij] = K_hbm[global_ij];
-          sV[ij] = V_hbm[global_ij];
+          sK[ij] = mK[global_ij];
+          sV[ij] = mV[global_ij];
         } else {
           sK[ij] = static_cast<T>(0);
           sV[ij] = static_cast<T>(0);
@@ -160,13 +158,13 @@ __global__ void mat_flash_attention(
       for (size_t col = 0; col < Bc; col++) {
         pv += sS[threadIdx.x * D + col] * sV[col * D + d];
       }
-      O_hbm[global_q_row * D + d] =
+      mO[global_q_row * D + d] =
           (1 / new_l) *
-          ((current_l * exp(current_m - new_m) * O_hbm[global_q_row * D + d]) +
+          ((current_l * exp(current_m - new_m) * mO[global_q_row * D + d]) +
            (exp(row_m - new_m) * pv));
     }
-    l_hbm[global_q_row] = new_l;
-    m_hbm[global_q_row] = new_m;
+    vl[global_q_row] = new_l;
+    vm[global_q_row] = new_m;
     __syncthreads();
   }
 }
