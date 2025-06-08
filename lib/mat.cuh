@@ -3,7 +3,9 @@
 #include "cuda_err.cuh"
 #include "cuda_ptr.cuh"
 #include "rand.h"
+#include <algorithm>
 #include <cuda/std/limits>
+#include <limits>
 #include <vector>
 
 const size_t WARP_SIZE = 32;
@@ -90,6 +92,90 @@ __global__ void mat_softmax(const T *const __restrict__ mA,
     }
     for (size_t i = 0; i < m; ++i) {
       mB[row * m + i] /= sum_exp;
+    }
+  }
+}
+
+template <typename T>
+__global__ void mat_flash_attention(
+    const T *const __restrict__ Q, const T *const __restrict__ K,
+    const T *const __restrict__ V, const size_t N, const size_t d,
+    const size_t Tc, const size_t Tr, const size_t Bc, const size_t Br,
+    T *const __restrict__ l, T *const __restrict__ m, T *const __restrict__ O) {
+  const size_t tx = threadIdx.x;
+  const size_t bx = blockIdx.x;
+  const size_t by = blockIdx.y;
+  const size_t qkv_offset = (bx * gridDim.y * N * d) + (by * N * d);
+  const size_t lm_offset = (bx * gridDim.y * N) + (by * N);
+  extern __shared__ T sram[];
+  T *Qi = sram;
+  T *Kj = &sram[Br * d];
+  T *Vj = &sram[Br * d + Bc * d];
+  T *S = &sram[Br * d + Bc * d + Bc * d];
+  for (size_t j = 0; j < Tc; j++) {
+    if (tx < Bc) {
+      for (size_t x = 0; x < d; x++) {
+        const size_t kj_row = j * Bc + tx;
+        if (kj_row < N) {
+          Kj[tx * d + x] = K[qkv_offset + kj_row * d + x];
+          Vj[tx * d + x] = V[qkv_offset + kj_row * d + x];
+        }
+      }
+    }
+    __syncthreads();
+    for (size_t i = 0; i < Tr; i++) {
+      if (tx < Br) {
+        for (size_t x = 0; x < d; x++) {
+          const size_t qi_row = i * Br + tx;
+          if (qi_row < N) {
+            Qi[tx * d + x] = Q[qkv_offset + qi_row * d + x];
+          }
+        }
+      }
+      const size_t row_idx = i * Br + tx;
+      T row_m_prev = m[lm_offset + row_idx];
+      T row_l_prev = l[lm_offset + row_idx];
+      T row_m = ::cuda::std::numeric_limits<T>::lowest();
+      if (row_idx < N) {
+        for (int y = 0; y < Bc; y++) {
+          T sum = 0;
+          const size_t kj_row = j * Bc + y;
+          if (kj_row < N) {
+            for (size_t x = 0; x < d; x++) {
+              sum += Qi[tx * d + x] * Kj[y * d + x];
+            }
+          }
+          S[tx * Bc + y] = sum;
+          if (sum > row_m) {
+            row_m = sum;
+          }
+        }
+        T row_l = 0;
+        for (size_t y = 0; y < Bc; y++) {
+          const T val = exp(S[tx * Bc + y] - row_m);
+          S[tx * Bc + y] = val;
+          row_l += val;
+        }
+        const T row_m_new = max(row_m_prev, row_m);
+        const T row_l_new = (exp(row_m_prev - row_m_new) * row_l_prev) +
+                            (exp(row_m - row_m_new) * row_l);
+        for (size_t x = 0; x < d; x++) {
+          T pv = 0;
+          for (size_t y = 0; y < Bc; y++) {
+            const size_t kj_row = j * Bc + y;
+            if (kj_row < N) {
+              pv += S[tx * Bc + y] * Vj[y * d + x];
+            }
+          }
+          const size_t o_idx = qkv_offset + row_idx * d + x;
+          O[o_idx] = (1 / row_l_new) *
+                     ((row_l_prev * exp(row_m_prev - row_m_new) * O[o_idx]) +
+                      (exp(row_m - row_m_new) * pv));
+        }
+        m[lm_offset + row_idx] = row_m_new;
+        l[lm_offset + row_idx] = row_l_new;
+      }
+      __syncthreads();
     }
   }
 }
@@ -202,6 +288,11 @@ public:
     return result;
   }
 
+  static Mat<T, N, M> zeros() {
+    const std::vector<T> v(N * M, 0);
+    return Mat<T, N, M>(v);
+  }
+
   static Mat<T, N, M> random() {
     Mat<T, N, M> mat;
     if constexpr (N != 0 && M != 0) {
@@ -218,6 +309,36 @@ public:
     const auto s = mQ.dot_shared(mKT);
     const auto p = s.softmax();
     return p.dot_shared(mV);
+  }
+
+  static Mat<T, N, M> flash_attention(const Mat<T, N, M> &mQ,
+                                      const Mat<T, N, M> &mK,
+                                      const Mat<T, N, M> &mV) {
+    Mat<T, N, M> result;
+    if constexpr (N != 0 && M != 0) {
+      const size_t seq_len = N;
+      const size_t head_dim = M;
+      const size_t Br = 64;
+      const size_t Bc = 64;
+      const size_t Tr = (seq_len + Br - 1) / Br;
+      const size_t Tc = (seq_len + Bc - 1) / Bc;
+      CudaPtr<T> l_ptr(seq_len);
+      const std::vector vl(seq_len, static_cast<T>(0));
+      l_ptr.copy_from_host_ptr(vl.data(), vl.size() * sizeof(T));
+      CudaPtr<T> m_ptr(seq_len);
+      const std::vector vm(seq_len, std::numeric_limits<T>::lowest());
+      m_ptr.copy_from_host_ptr(vm.data(), vm.size() * sizeof(T));
+      dim3 dimGrid(1, Tr);
+      dim3 dimBlock(Br);
+      const size_t shared_mem_size =
+          (Br * head_dim + Bc * head_dim + Bc * head_dim + Br * Bc) * sizeof(T);
+      std::cout << "about to start flash attention\n";
+      mat_flash_attention<<<dimGrid, dimBlock, shared_mem_size>>>(
+          mQ.data(), mK.data(), mV.data(), seq_len, head_dim, Tc, Tr, Bc, Br,
+          l_ptr.get(), m_ptr.get(), result.data());
+      CUDA_CHECK(cudaGetLastError());
+      CUDA_CHECK(cudaDeviceSynchronize());
+    }
   }
 
 private:

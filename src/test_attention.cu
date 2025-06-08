@@ -78,6 +78,18 @@ template <typename T, size_t N, size_t M> void test_attention() {
   compare(mO, o);
 }
 
+template <typename T, size_t N, size_t M> void test_flash_attention() {
+  const auto q = cpu::random<T, N, M>();
+  const auto k = cpu::random<T, N, M>();
+  const auto v = cpu::random<T, N, M>();
+  const auto o = cpu::attention<T, N, M>(q, k, v);
+  const auto mQ = Mat::Mat<T, N, M>(q);
+  const auto mK = Mat::Mat<T, N, M>(k);
+  const auto mV = Mat::Mat<T, N, M>(v);
+  const auto mO = Mat::Mat<T, N, M>::flash_attention(mQ, mK, mV);
+  compare(mO, o);
+}
+
 template <typename T> void test_attention_cpu() {
   const size_t N = 3;
   const size_t D = 2;
@@ -117,10 +129,12 @@ int main(void) {
   test_from_vector<float, N, D>();
   test_transpose<float, N, D>();
   test_softmax<float, N, D>();
-  test_attention<float, N, N>();
+  test_attention<float, N, D>();
+  test_flash_attention<float, N, D>();
   test_from_vector<float, D, N>();
   test_transpose<float, D, N>();
   test_softmax<float, D, N>();
   test_attention<float, D, N>();
+  // test_flash_attention<float, D, N>();
   return EXIT_SUCCESS;
 }
